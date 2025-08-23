@@ -32,35 +32,60 @@ const Index = () => {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const refreshData = async () => {
-    const [jobsData, backendsData, statsData] = await Promise.all([
-      getQuantumJobs(),
-      getQuantumBackends(), 
-      getDashboardStats()
-    ]);
-    
-    setJobs(jobsData);
-    setBackends(backendsData);
-    setStats(statsData);
-    setLastUpdated(new Date());
+    try {
+      const [jobsData, backendsData, statsData] = await Promise.all([
+        getQuantumJobs(),
+        getQuantumBackends(), 
+        getDashboardStats()
+      ]);
+      
+      // Ensure we have valid arrays before setting state
+      if (Array.isArray(jobsData)) setJobs(jobsData);
+      if (Array.isArray(backendsData)) setBackends(backendsData);
+      if (statsData) setStats(statsData);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      // Set empty arrays as fallback
+      setJobs([]);
+      setBackends([]);
+    }
   };
 
   useEffect(() => {
-    refreshData();
+    let mounted = true;
     
-    const cleanup = simulateRealtimeUpdates(() => {
-      refreshData();
-    });
-
-    return cleanup;
+    const initializeData = async () => {
+      try {
+        await refreshData();
+        
+        if (mounted) {
+          const cleanup = simulateRealtimeUpdates(() => {
+            refreshData();
+          });
+          
+          return cleanup;
+        }
+      } catch (error) {
+        console.error('Failed to initialize data:', error);
+      }
+    };
+    
+    const cleanupPromise = initializeData();
+    
+    return () => {
+      mounted = false;
+      cleanupPromise.then(cleanup => cleanup && cleanup());
+    };
   }, []);
 
-  const filteredJobs = jobs.filter(job => {
+  const filteredJobs = Array.isArray(jobs) ? jobs.filter(job => {
     const matchesSearch = job.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          job.backend.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          job.userId.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
     return matchesSearch && matchesStatus;
-  });
+  }) : [];
 
   if (!stats) return null;
 
@@ -126,7 +151,7 @@ const Index = () => {
             Quantum Backends
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {backends.map(backend => (
+            {Array.isArray(backends) && backends.map(backend => (
               <BackendCard key={backend.id} backend={backend} />
             ))}
           </div>
