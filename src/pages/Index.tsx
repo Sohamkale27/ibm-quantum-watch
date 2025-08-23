@@ -31,10 +31,16 @@ const Index = () => {
   const [statusFilter, setStatusFilter] = useState<QuantumJob['status'] | 'all'>('all');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  const refreshData = () => {
-    setJobs(getQuantumJobs());
-    setBackends(getQuantumBackends());
-    setStats(getDashboardStats());
+  const refreshData = async () => {
+    const [jobsData, backendsData, statsData] = await Promise.all([
+      getQuantumJobs(),
+      getQuantumBackends(), 
+      getDashboardStats()
+    ]);
+    
+    setJobs(jobsData);
+    setBackends(backendsData);
+    setStats(statsData);
     setLastUpdated(new Date());
   };
 

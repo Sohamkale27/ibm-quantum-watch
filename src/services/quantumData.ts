@@ -1,7 +1,23 @@
 import { QuantumJob, QuantumBackend, DashboardStats } from '@/types/quantum';
+import { ibmQuantumAPI } from './ibmQuantumApi';
 
-// Simulated IBM Quantum backends
-const QUANTUM_BACKENDS: QuantumBackend[] = [
+// Cache for API data to avoid excessive requests
+let dataCache: {
+  jobs: QuantumJob[];
+  backends: QuantumBackend[];
+  stats: DashboardStats | null;
+  lastFetch: number;
+} = {
+  jobs: [],
+  backends: [],
+  stats: null,
+  lastFetch: 0,
+};
+
+const CACHE_DURATION = 30000; // 30 seconds
+
+// Fallback simulated data (used when API is unavailable)
+const FALLBACK_BACKENDS: QuantumBackend[] = [
   {
     id: 'ibm_kyoto',
     name: 'IBM Kyoto',
@@ -52,19 +68,18 @@ const QUANTUM_BACKENDS: QuantumBackend[] = [
   }
 ];
 
-// Generate simulated quantum jobs
-const generateQuantumJobs = (): QuantumJob[] => {
+const generateFallbackJobs = (): QuantumJob[] => {
   const jobs: QuantumJob[] = [];
   const statuses: QuantumJob['status'][] = ['queued', 'running', 'completed', 'error'];
   const users = ['alice.quantum', 'bob.researcher', 'carol.phd', 'david.lab', 'eve.student'];
   
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 20; i++) {
     const status = statuses[Math.floor(Math.random() * statuses.length)];
-    const backend = QUANTUM_BACKENDS[Math.floor(Math.random() * QUANTUM_BACKENDS.length)];
+    const backend = FALLBACK_BACKENDS[Math.floor(Math.random() * FALLBACK_BACKENDS.length)];
     const createdAt = new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000);
     
     const job: QuantumJob = {
-      id: `job_${Date.now()}_${i}`,
+      id: `fallback_job_${i}`,
       name: `Quantum Algorithm ${i + 1}`,
       status,
       backend: backend.name,
@@ -92,61 +107,82 @@ const generateQuantumJobs = (): QuantumJob[] => {
   return jobs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 };
 
-let quantumJobs = generateQuantumJobs();
-
-export const getQuantumJobs = (): QuantumJob[] => {
-  return [...quantumJobs];
+const shouldRefreshCache = (): boolean => {
+  return Date.now() - dataCache.lastFetch > CACHE_DURATION;
 };
 
-export const getQuantumBackends = (): QuantumBackend[] => {
-  return [...QUANTUM_BACKENDS];
+const refreshDataFromAPI = async (): Promise<void> => {
+  try {
+    console.log('Fetching data from IBM Quantum API...');
+    
+    // Fetch data from IBM Quantum API
+    const [backends, jobs] = await Promise.all([
+      ibmQuantumAPI.getBackends(),
+      ibmQuantumAPI.getJobs(),
+    ]);
+
+    const stats = await ibmQuantumAPI.getDashboardStats(jobs, backends);
+
+    // Update cache
+    dataCache = {
+      jobs,
+      backends,
+      stats,
+      lastFetch: Date.now(),
+    };
+
+    console.log(`Fetched ${jobs.length} jobs and ${backends.length} backends from IBM Quantum API`);
+  } catch (error) {
+    console.warn('Failed to fetch from IBM Quantum API, using fallback data:', error);
+    
+    // Use fallback data when API is unavailable
+    const fallbackJobs = generateFallbackJobs();
+    const fallbackStats = {
+      totalJobs: fallbackJobs.length,
+      runningJobs: fallbackJobs.filter(j => j.status === 'running').length,
+      queuedJobs: fallbackJobs.filter(j => j.status === 'queued').length,
+      completedJobs: fallbackJobs.filter(j => j.status === 'completed').length,
+      activeBackends: FALLBACK_BACKENDS.filter(b => b.status === 'online').length,
+      totalQubits: FALLBACK_BACKENDS.filter(b => b.status === 'online').reduce((sum, b) => sum + b.qubits, 0),
+    };
+
+    dataCache = {
+      jobs: fallbackJobs,
+      backends: FALLBACK_BACKENDS,
+      stats: fallbackStats,
+      lastFetch: Date.now(),
+    };
+  }
 };
 
-export const getDashboardStats = (): DashboardStats => {
-  const jobs = getQuantumJobs();
-  const backends = getQuantumBackends();
-  
-  return {
-    totalJobs: jobs.length,
-    runningJobs: jobs.filter(j => j.status === 'running').length,
-    queuedJobs: jobs.filter(j => j.status === 'queued').length,
-    completedJobs: jobs.filter(j => j.status === 'completed').length,
-    activeBackends: backends.filter(b => b.status === 'online').length,
-    totalQubits: backends.filter(b => b.status === 'online').reduce((sum, b) => sum + b.qubits, 0)
-  };
+export const getQuantumJobs = async (): Promise<QuantumJob[]> => {
+  if (shouldRefreshCache()) {
+    await refreshDataFromAPI();
+  }
+  return [...dataCache.jobs];
 };
 
-// Simulate real-time updates
+export const getQuantumBackends = async (): Promise<QuantumBackend[]> => {
+  if (shouldRefreshCache()) {
+    await refreshDataFromAPI();
+  }
+  return [...dataCache.backends];
+};
+
+export const getDashboardStats = async (): Promise<DashboardStats> => {
+  if (shouldRefreshCache()) {
+    await refreshDataFromAPI();
+  }
+  return dataCache.stats!;
+};
+
+// Real-time updates (triggers cache refresh)
 export const simulateRealtimeUpdates = (callback: () => void) => {
-  const updateInterval = setInterval(() => {
-    // Randomly update job statuses
-    quantumJobs = quantumJobs.map(job => {
-      if (Math.random() < 0.05) { // 5% chance of status change
-        if (job.status === 'queued' && Math.random() < 0.3) {
-          return { ...job, status: 'running' as const, startedAt: new Date() };
-        }
-        if (job.status === 'running' && Math.random() < 0.4) {
-          return { 
-            ...job, 
-            status: 'completed' as const, 
-            completedAt: new Date(),
-            executionTime: Math.floor(Math.random() * 300) + 30,
-            errorRate: Math.random() * 0.1
-          };
-        }
-      }
-      return job;
-    });
-
-    // Occasionally add new jobs
-    if (Math.random() < 0.1) {
-      const newJob = generateQuantumJobs()[0];
-      quantumJobs.unshift({ ...newJob, id: `job_${Date.now()}_new` });
-      quantumJobs = quantumJobs.slice(0, 50); // Keep only latest 50
-    }
-
+  const updateInterval = setInterval(async () => {
+    // Force cache refresh by calling the API functions
+    await refreshDataFromAPI();
     callback();
-  }, 3000);
+  }, 30000); // Refresh every 30 seconds
 
   return () => clearInterval(updateInterval);
 };
