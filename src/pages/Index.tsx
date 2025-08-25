@@ -5,12 +5,14 @@ import { Badge } from '@/components/ui/badge';
 import { JobCard } from '@/components/quantum/JobCard';
 import { BackendCard } from '@/components/quantum/BackendCard';
 import { StatsCard } from '@/components/quantum/StatsCard';
+import { ApiKeyDialog } from '@/components/quantum/ApiKeyDialog';
 import { 
   getQuantumJobs, 
   getQuantumBackends, 
   getDashboardStats,
   simulateRealtimeUpdates 
 } from '@/services/quantumData';
+import { ibmQuantumAPI } from '@/services/ibmQuantumApi';
 import { QuantumJob, QuantumBackend, DashboardStats } from '@/types/quantum';
 import { 
   Search, 
@@ -30,6 +32,17 @@ const Index = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<QuantumJob['status'] | 'all'>('all');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [hasApiCredentials, setHasApiCredentials] = useState(false);
+
+  const handleCredentialsSet = (apiKey: string, serviceCrn: string) => {
+    ibmQuantumAPI.setCredentials(apiKey, serviceCrn);
+    setHasApiCredentials(true);
+    refreshData(); // Refresh data with new credentials
+  };
+
+  useEffect(() => {
+    setHasApiCredentials(ibmQuantumAPI.hasCredentials());
+  }, []);
 
   const refreshData = async () => {
     try {
@@ -94,11 +107,17 @@ const Index = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-mono font-bold bg-gradient-quantum bg-clip-text text-transparent">
-            IBM Quantum Dashboard
-          </h1>
+          <div className="flex items-center justify-center gap-4">
+            <h1 className="text-4xl font-mono font-bold bg-gradient-quantum bg-clip-text text-transparent">
+              IBM Quantum Dashboard
+            </h1>
+            <ApiKeyDialog 
+              onCredentialsSet={handleCredentialsSet}
+              hasCredentials={hasApiCredentials}
+            />
+          </div>
           <p className="text-muted-foreground font-mono">
-            Live quantum computing jobs and system status
+            {hasApiCredentials ? 'Live quantum computing jobs and system status' : 'Demo mode - Connect your API for live data'}
           </p>
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <RefreshCw className="w-3 h-3 quantum-spin" />

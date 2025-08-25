@@ -40,13 +40,24 @@ class IBMQuantumAPI {
   private baseUrl = 'https://quantum.cloud.ibm.com/api/v1';
   private tokenCache: { token: string; expires: number } | null = null;
 
+  setCredentials(apiKey: string, serviceCrn: string) {
+    localStorage.setItem('ibm_quantum_api_key', apiKey);
+    localStorage.setItem('ibm_quantum_service_crn', serviceCrn);
+    // Clear token cache when credentials change
+    this.tokenCache = null;
+  }
+
+  hasCredentials(): boolean {
+    return !!(localStorage.getItem('ibm_quantum_api_key') && localStorage.getItem('ibm_quantum_service_crn'));
+  }
+
   private async getBearerToken(): Promise<string> {
     // Check if we have a valid cached token
     if (this.tokenCache && Date.now() < this.tokenCache.expires) {
       return this.tokenCache.token;
     }
 
-    const apiKey = process.env.IBM_QUANTUM_API_KEY;
+    const apiKey = localStorage.getItem('ibm_quantum_api_key');
     if (!apiKey) {
       throw new Error('IBM Quantum API key not configured');
     }
@@ -81,7 +92,7 @@ class IBMQuantumAPI {
 
   private async makeRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const bearerToken = await this.getBearerToken();
-    const serviceCrn = process.env.IBM_QUANTUM_SERVICE_CRN;
+    const serviceCrn = localStorage.getItem('ibm_quantum_service_crn');
 
     if (!serviceCrn) {
       throw new Error('IBM Quantum Service CRN not configured');
