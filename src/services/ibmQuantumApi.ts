@@ -86,6 +86,9 @@ class IBMQuantumAPI {
       return data.access_token;
     } catch (error) {
       console.error('Failed to authenticate with IBM Quantum:', error);
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error('CORS_ERROR: Direct browser access to IBM Quantum API is blocked. This requires a backend proxy server.');
+      }
       throw new Error('Authentication failed');
     }
   }
@@ -133,7 +136,9 @@ class IBMQuantumAPI {
       }));
     } catch (error) {
       console.error('Failed to fetch backends:', error);
-      // Return empty array or throw based on your preference
+      if (error instanceof Error && error.message.includes('CORS_ERROR')) {
+        throw error; // Propagate CORS error to show user-friendly message
+      }
       return [];
     }
   }
@@ -160,7 +165,9 @@ class IBMQuantumAPI {
       }));
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
-      // Return empty array or throw based on your preference
+      if (error instanceof Error && error.message.includes('CORS_ERROR')) {
+        throw error; // Propagate CORS error to show user-friendly message
+      }
       return [];
     }
   }

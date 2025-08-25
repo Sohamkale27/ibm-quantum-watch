@@ -6,6 +6,7 @@ import { JobCard } from '@/components/quantum/JobCard';
 import { BackendCard } from '@/components/quantum/BackendCard';
 import { StatsCard } from '@/components/quantum/StatsCard';
 import { ApiKeyDialog } from '@/components/quantum/ApiKeyDialog';
+import { CorsErrorAlert } from '@/components/quantum/CorsErrorAlert';
 import { 
   getQuantumJobs, 
   getQuantumBackends, 
@@ -33,6 +34,7 @@ const Index = () => {
   const [statusFilter, setStatusFilter] = useState<QuantumJob['status'] | 'all'>('all');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [hasApiCredentials, setHasApiCredentials] = useState(false);
+  const [showCorsError, setShowCorsError] = useState(false);
 
   const handleCredentialsSet = (apiKey: string, serviceCrn: string) => {
     ibmQuantumAPI.setCredentials(apiKey, serviceCrn);
@@ -57,8 +59,13 @@ const Index = () => {
       if (Array.isArray(backendsData)) setBackends(backendsData);
       if (statsData) setStats(statsData);
       setLastUpdated(new Date());
+      setShowCorsError(false); // Hide CORS error on successful fetch
     } catch (error) {
       console.error('Error refreshing data:', error);
+      // Check if it's a CORS error
+      if (error instanceof Error && error.message.includes('CORS_ERROR')) {
+        setShowCorsError(true);
+      }
       // Set empty arrays as fallback
       setJobs([]);
       setBackends([]);
@@ -124,6 +131,11 @@ const Index = () => {
             <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
           </div>
         </div>
+
+        {/* CORS Error Alert */}
+        {showCorsError && hasApiCredentials && (
+          <CorsErrorAlert />
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
